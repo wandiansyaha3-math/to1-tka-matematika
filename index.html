@@ -627,82 +627,49 @@ Jika seseorang membeli 19,6 kg untuk jenis beras yang sama, berapa perkiraan tot
     <h1 id="skor-teks" style="font-size: 5em; color: #27ae60; margin: 0;">0</h1>
     <p style="font-size: 1.5em;">Skor Anda</p>
     <p id="deskripsi"></p>
-    <button onclick="location.reload()" style="padding: 10px 20px; cursor: pointer;">Ulangi Ujian</button>
+    
 </div>
 </div>
 
 
  <script>
+// 1. KONFIGURASI KUNCI PENYIMPANAN
 const STORAGE_KEY = "sisa_waktu_ujian_mtk";
 const JAWABAN_KEY = "jawaban_siswa_mtk";
 const DURASI_MENIT = 70;
 
 document.addEventListener("DOMContentLoaded", function() {
-    // 1. GENERATE NAVIGASI SOAL (Ditempatkan paling atas agar muncul duluan)
-    const navGrid = document.getElementById("nav-grid");
-    if (navGrid) {
-        for (let i = 1; i <= 30; i++) {
-            let btn = document.createElement("div");
-            btn.classList.add("nav-item");
-            btn.id = "nav-soal-" + i;
-            btn.innerText = i;
-            btn.onclick = function() {
-                const target = document.querySelector(`[name="q${i}"]`) || 
-                             document.querySelector(`[name="q${i}_1"]`);
-                if (target) {
-                    target.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            };
-            navGrid.appendChild(btn);
-        }
-    }
-
-    // 2. LOAD JAWABAN (Dibuat sangat aman agar tidak Crash)
-    try {
-        const savedAnswers = JSON.parse(localStorage.getItem(JAWABAN_KEY));
-        if (savedAnswers) {
-            Object.entries(savedAnswers).forEach(([name, value]) => {
-                if (Array.isArray(value)) {
-                    // Jika Checkbox
-                    value.forEach(val => {
-                        const el = document.querySelector(`input[name="${name}"][value="${val}"]`);
-                        if (el) el.checked = true;
-                    });
-                } else {
-                    // Jika Radio/PG
-                    const el = document.querySelector(`input[name="${name}"][value="${value}"]`);
-                    if (el) el.checked = true;
-                }
-                
-                // Tandai navigasi hijau
-                let nomor = name.match(/\d+/);
-                if(nomor) {
-                    const navItem = document.getElementById("nav-soal-" + nomor[0]);
-                    if(navItem) navItem.classList.add("filled");
-                }
-            });
-        }
-    } catch (e) { console.error("Gagal memuat jawaban:", e); }
-
-    // 3. LOGIKA TIMER ANTI-REFRESH
+    // A. LOGIKA TIMER (ANTI-REFRESH & RESET)
     const displayWaktu = document.getElementById('waktu-mundur');
+    const urlParams = new URLSearchParams(window.location.search);
+    const isResetAction = urlParams.has('reset');
+
     let sisaDetik = localStorage.getItem(STORAGE_KEY);
-    
-    if (sisaDetik === null || sisaDetik === undefined) {
+
+    // Jika ada perintah reset ATAU tidak ada data waktu sama sekali
+    if (isResetAction || sisaDetik === null) {
         sisaDetik = DURASI_MENIT * 60;
+        localStorage.setItem(STORAGE_KEY, sisaDetik);
+        
+        // Bersihkan URL dari "?reset=true" agar saat di-refresh TIDAK reset lagi
+        if (isResetAction) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
     } else {
         sisaDetik = parseInt(sisaDetik);
     }
 
-    const intervalTimer = setInterval(function () {
+    // Jalankan Detak Timer
+    window.intervalTimer = setInterval(function () {
         if (sisaDetik <= 0) {
-            clearInterval(intervalTimer);
+            clearInterval(window.intervalTimer);
             localStorage.removeItem(STORAGE_KEY);
             if (displayWaktu) displayWaktu.innerText = "00:00:00";
-            alert("Waktu habis!");
+            alert("Waktu habis! Jawaban Anda akan terkirim otomatis.");
             hitungSkor();
             return;
         }
+
         sisaDetik--;
         localStorage.setItem(STORAGE_KEY, sisaDetik);
 
@@ -718,16 +685,58 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }, 1000);
 
-    // 4. SIMPAN JAWABAN OTOMATIS
+    // B. GENERATE NAVIGASI SOAL
+    const navGrid = document.getElementById("nav-grid");
+    if (navGrid) {
+        for (let i = 1; i <= 30; i++) {
+            let btn = document.createElement("div");
+            btn.classList.add("nav-item");
+            btn.id = "nav-soal-" + i;
+            btn.innerText = i;
+            btn.onclick = function() {
+                const soalElement = document.querySelector(`[name="q${i}"]`) || document.querySelector(`[name="q${i}_1"]`);
+                if (soalElement) {
+                    soalElement.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            };
+            navGrid.appendChild(btn);
+        }
+    }
+
+    // C. LOAD JAWABAN (Dukung Array Checkbox agar Skor Konsisten)
+    try {
+        const savedAnswers = JSON.parse(localStorage.getItem(JAWABAN_KEY));
+        if (savedAnswers) {
+            for (const [name, value] of Object.entries(savedAnswers)) {
+                if (Array.isArray(value)) {
+                    value.forEach(val => {
+                        const input = document.querySelector(`input[name="${name}"][value="${val}"]`);
+                        if (input) input.checked = true;
+                    });
+                } else {
+                    const input = document.querySelector(`input[name="${name}"][value="${value}"]`);
+                    if (input) input.checked = true;
+                }
+                
+                // Warnai Navigasi
+                let nomorMatch = name.match(/\d+/);
+                if(nomorMatch) {
+                    const navItem = document.getElementById("nav-soal-" + nomorMatch[0]);
+                    if(navItem) navItem.classList.add("filled");
+                }
+            }
+        }
+    } catch (e) { console.error("Gagal load jawaban", e); }
+
+    // D. SIMPAN JAWABAN OTOMATIS
     document.addEventListener("change", function(e) {
         if (e.target.name) {
             const semuaJawaban = JSON.parse(localStorage.getItem(JAWABAN_KEY)) || {};
             const name = e.target.name;
             
             if (e.target.type === 'checkbox') {
-                const checkedValues = Array.from(document.querySelectorAll(`input[name="${name}"]:checked`))
-                                          .map(el => el.value);
-                semuaJawaban[name] = checkedValues;
+                const checked = document.querySelectorAll(`input[name="${name}"]:checked`);
+                semuaJawaban[name] = Array.from(checked).map(el => el.value);
             } else {
                 semuaJawaban[name] = e.target.value;
             }
@@ -743,13 +752,16 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 });
 
-// 5. FUNGSI HITUNG SKOR
+// 2. FUNGSI HITUNG SKOR
 function hitungSkor() {
     const nama = document.getElementById("nama-siswa").value;
     const nis = document.getElementById("nis-siswa").value;
     const kelas = document.getElementById("kelas-siswa").value;
 
-    if (!nama || !nis || !kelas) { alert("Lengkapi identitas!"); return; }
+    if (!nama || !nis || !kelas) {
+        alert("Mohon lengkapi identitas!");
+        return;
+    }
 
     let benar = 0;
     // PG 1-16
@@ -758,7 +770,7 @@ function hitungSkor() {
         if(document.querySelector(`input[name="${q}"]:checked`)?.value === kunciPG[q]) benar++;
     }
 
-    // PG Kompleks 17-23 (PENTING: Gunakan fungsi checkMC di bawah)
+    // PG Kompleks 17-23
     if(checkMC("q17", ["1","2","3"])) benar++;
     if(checkMC("q18", ["3","4"])) benar++;
     if(checkMC("q19", ["1","3"])) benar++;
@@ -768,45 +780,42 @@ function hitungSkor() {
     if(checkMC("q23", ["1","2","3"])) benar++;
 
     // Benar/Salah 24-30
-    if(checkBS("q24", ["B","B","S"])) benar++;
-    if(checkBS("q25", ["B","S","B"])) benar++;
-    if(checkBS("q26", ["B","B","S"])) benar++;
-    if(checkBS("q27", ["S","B","B"])) benar++;
-    if(checkBS("q28", ["B","S","B"])) benar++;
-    if(checkBS("q29", ["B","B","S"])) benar++;
-    if(checkBS("q30", ["B","B","S"])) benar++;
+    const kunciBS = {
+        "q24":["B","B","S"], "q25":["B","S","B"], "q26":["B","B","S"],
+        "q27":["S","B","B"], "q28":["B","S","B"], "q29":["B","B","S"], "q30":["B","B","S"]
+    };
+    for (let q in kunciBS) {
+        if(checkBS(q, kunciBS[q])) benar++;
+    }
 
     let nilai = Math.round((benar / 30) * 100);
 
+    // Tampilkan Hasil
     document.getElementById("res-nama").innerText = nama;
     document.getElementById("skor-teks").innerText = nilai;
     document.getElementById("quiz-content").style.display = "none";
     document.querySelector(".sidebar").style.display = "none";
     document.getElementById("hasil-akhir").style.display = "block";
     window.scrollTo({top: 0, behavior: 'smooth'});
-    
+
     kirimKeSheets(nama, nis, kelas, nilai);
 }
 
-// 6. FUNGSI RESET TOTAL
+// 3. FUNGSI RESET UNTUK SISWA BARU (PASTI RESET WAKTU)
 function resetUjian() {
-    if (confirm("Bersihkan semua data dan mulai ujian baru untuk siswa berikutnya?")) {
-        // 1. Hentikan detak timer agar tidak menulis ulang ke localStorage saat kita sedang menghapus
-        if (typeof intervalTimer !== 'undefined') {
-            clearInterval(intervalTimer);
-        }
+    if (confirm("Mulai ujian baru untuk siswa berikutnya? Seluruh jawaban dan waktu akan di-reset.")) {
+        // Hentikan timer yang sedang berjalan
+        if (window.intervalTimer) clearInterval(window.intervalTimer);
+        
+        // Hapus memori browser
+        localStorage.clear();
 
-        // 2. Hapus semua memori tersimpan
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(JAWABAN_KEY);
-        localStorage.clear(); 
-
-        // 3. Muat ulang halaman dengan 'Force Reload' 
-        // Penambahan parameter ?reset memastikan browser tidak mengambil data lama
-        window.location.href = window.location.pathname + "?reset=" + Date.now();
+        // Paksa ke halaman dengan parameter reset agar timer kembali ke 70 menit
+        window.location.href = window.location.pathname + "?reset=true";
     }
 }
 
+// FUNGSI PEMBANTU
 function checkMC(name, kunci) {
     let choices = Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(el => el.value.trim());
     if (choices.length !== kunci.length) return false;
@@ -831,7 +840,6 @@ function kirimKeSheets(nama, nis, kelas, skor) {
     fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: formulir });
 }
 </script>
-
 
 </body>
 </html>
