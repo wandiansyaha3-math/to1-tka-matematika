@@ -632,59 +632,60 @@ Jika seseorang membeli 19,6 kg untuk jenis beras yang sama, berapa perkiraan tot
 </div>
 
 <script>
-// 1. KONFIGURASI UTAMA (MATEMATIKA)
-const STORAGE_KEY = "sisa_waktu_ujian_mtk"; 
+// 1. KONFIGURASI KUNCI PENYIMPANAN
+const STORAGE_KEY = "sisa_waktu_ujian_mtk";
 const JAWABAN_KEY = "jawaban_siswa_mtk";
 const DURASI_MENIT = 70;
 
 document.addEventListener("DOMContentLoaded", function() {
+    // A. LOGIKA TIMER (ANTI-REFRESH & RESET)
     const displayWaktu = document.getElementById('waktu-mundur');
     const urlParams = new URLSearchParams(window.location.search);
-    
-    // --- FITUR AUTO-RESET (Sama dengan Bindo) ---
     const isResetAction = urlParams.has('reset');
-    const isNewSession = !sessionStorage.getItem("sesi_aktif_mtk");
 
-    if (isResetAction || isNewSession) {
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(JAWABAN_KEY);
-        sessionStorage.setItem("sesi_aktif_mtk", "true");
+    let sisaDetik = localStorage.getItem(STORAGE_KEY);
 
+    // Jika ada perintah reset ATAU tidak ada data waktu sama sekali
+    if (isResetAction || sisaDetik === null) {
+        sisaDetik = DURASI_MENIT * 60;
+        localStorage.setItem(STORAGE_KEY, sisaDetik);
+        
+        // Bersihkan URL dari "?reset=true" agar saat di-refresh TIDAK reset lagi
         if (isResetAction) {
             window.history.replaceState({}, document.title, window.location.pathname);
         }
-    }
-    // --------------------------------------------
-
-    // A. LOGIKA TIMER
-    let sisaDetik = localStorage.getItem(STORAGE_KEY);
-    if (sisaDetik === null) {
-        sisaDetik = DURASI_MENIT * 60;
-        localStorage.setItem(STORAGE_KEY, sisaDetik);
     } else {
         sisaDetik = parseInt(sisaDetik);
     }
 
+    // Jalankan Detak Timer
     window.intervalTimer = setInterval(function () {
         if (sisaDetik <= 0) {
             clearInterval(window.intervalTimer);
             localStorage.removeItem(STORAGE_KEY);
-            alert("Waktu ujian Matematika telah habis!");
-            selesaiUjian();
-        } else {
-            sisaDetik--;
-            localStorage.setItem(STORAGE_KEY, sisaDetik);
-            let h = Math.floor(sisaDetik / 3600);
-            let m = Math.floor((sisaDetik % 3600) / 60);
-            let s = sisaDetik % 60;
-            if(displayWaktu) {
-                displayWaktu.innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-            }
+            if (displayWaktu) displayWaktu.innerText = "00:00:00";
+            alert("Waktu habis! Jawaban Anda akan terkirim otomatis.");
+            hitungSkor();
+            return;
+        }
+
+        sisaDetik--;
+        localStorage.setItem(STORAGE_KEY, sisaDetik);
+
+        let jam = Math.floor(sisaDetik / 3600);
+        let menit = Math.floor((sisaDetik % 3600) / 60);
+        let detik = sisaDetik % 60;
+
+        if (displayWaktu) {
+            displayWaktu.innerText = 
+                (jam < 10 ? "0" + jam : jam) + ":" + 
+                (menit < 10 ? "0" + menit : menit) + ":" + 
+                (detik < 10 ? "0" + detik : detik);
         }
     }, 1000);
 
     // B. GENERATE NAVIGASI SOAL
-    const navGrid = document.getElementById('nav-grid');
+    const navGrid = document.getElementById("nav-grid");
     if (navGrid) {
         for (let i = 1; i <= 30; i++) {
             let btn = document.createElement("div");
@@ -692,16 +693,16 @@ document.addEventListener("DOMContentLoaded", function() {
             btn.id = "nav-soal-" + i;
             btn.innerText = i;
             btn.onclick = function() {
-                const soalEl = document.querySelector(`[name="q${i}"]`) || document.querySelector(`[name="q${i}_1"]`);
-                if (soalEl) {
-                    soalEl.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const soalElement = document.querySelector(`[name="q${i}"]`) || document.querySelector(`[name="q${i}_1"]`);
+                if (soalElement) {
+                    soalElement.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
             };
             navGrid.appendChild(btn);
         }
     }
 
-    // C. LOAD JAWABAN TERSIMPAN
+    // C. LOAD JAWABAN (Dukung Array Checkbox agar Skor Konsisten)
     try {
         const savedAnswers = JSON.parse(localStorage.getItem(JAWABAN_KEY));
         if (savedAnswers) {
@@ -716,6 +717,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     if (input) input.checked = true;
                 }
                 
+                // Warnai Navigasi
                 let nomorMatch = name.match(/\d+/);
                 if(nomorMatch) {
                     const navItem = document.getElementById("nav-soal-" + nomorMatch[0]);
@@ -723,9 +725,9 @@ document.addEventListener("DOMContentLoaded", function() {
                 }
             }
         }
-    } catch (e) { console.error("Error loading answers", e); }
+    } catch (e) { console.error("Gagal load jawaban", e); }
 
-    // D. SIMPAN OTOMATIS
+    // D. SIMPAN JAWABAN OTOMATIS
     document.addEventListener("change", function(e) {
         if (e.target.name) {
             const semuaJawaban = JSON.parse(localStorage.getItem(JAWABAN_KEY)) || {};
@@ -749,42 +751,37 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 });
 
-// 2. FUNGSI SELESAI
-function selesaiUjian() {
+// 2. FUNGSI HITUNG SKOR
+function hitungSkor() {
     const nama = document.getElementById("nama-siswa").value;
     const nis = document.getElementById("nis-siswa").value;
     const kelas = document.getElementById("kelas-siswa").value;
 
     if (!nama || !nis || !kelas) {
-        alert("Mohon lengkapi Nama, NIS, dan Kelas!");
+        alert("Mohon lengkapi identitas!");
         return;
     }
 
-    if (!confirm("Akhiri ujian Matematika?")) return;
-    
-    if (window.intervalTimer) clearInterval(window.intervalTimer);
-
     let benar = 0;
-    
-    // KUNCI JAWABAN MATEMATIKA (Tetap sesuai kunci lama Bapak)
-    const kunciPG = {"q1":"B","q5":"C","q8":"B","q10":"C","q13":"C","q15":"A","q17":"B","q19":"C","q22":"B","q24":"A","q25":"B","q27":"A","q30":"A"};
+    // PG 1-16
+    const kunciPG = {"q1":"A","q2":"B","q3":"B","q4":"B","q5":"C","q6":"A","q7":"B","q8":"C","q9":"C","q10":"B","q11":"C","q12":"C","q13":"B","q14":"D","q15":"D","q16":"A"};
     for (let q in kunciPG) {
         if(document.querySelector(`input[name="${q}"]:checked`)?.value === kunciPG[q]) benar++;
     }
 
-    if(checkMC("q2", ["1","2","4"])) benar++;
-    if(checkMC("q4", ["1","3"])) benar++;
-    if(checkMC("q7", ["1","3"])) benar++;
-    if(checkMC("q9", ["1","3"])) benar++;
-    if(checkMC("q12", ["2","3"])) benar++;
-    if(checkMC("q14", ["1","3"])) benar++;
-    if(checkMC("q18", ["1","3"])) benar++;
-    if(checkMC("q21", ["1","3"])) benar++;
-    if(checkMC("q23", ["2","4"])) benar++;
-    if(checkMC("q29", ["1","3"])) benar++;
+    // PG Kompleks 17-23
+    if(checkMC("q17", ["1","2","3"])) benar++;
+    if(checkMC("q18", ["3","4"])) benar++;
+    if(checkMC("q19", ["1","3"])) benar++;
+    if(checkMC("q20", ["1","4"])) benar++;
+    if(checkMC("q21", ["1","2","3"])) benar++;
+    if(checkMC("q22", ["1","2"])) benar++;
+    if(checkMC("q23", ["1","2","3"])) benar++;
 
+    // Benar/Salah 24-30
     const kunciBS = {
-        "q3":["B","B","S"],"q6":["S","B","B"],"q11":["B","S","B"],"q16":["B","S","B"],"q20":["B","B","S"],"q26":["B","S","B"],"q28":["S","B","B"]
+        "q24":["B","B","S"], "q25":["B","S","B"], "q26":["B","B","S"],
+        "q27":["S","B","B"], "q28":["B","S","B"], "q29":["B","B","S"], "q30":["B","B","S"]
     };
     for (let q in kunciBS) {
         if(checkBS(q, kunciBS[q])) benar++;
@@ -792,6 +789,7 @@ function selesaiUjian() {
 
     let nilai = Math.round((benar / 30) * 100);
 
+    // Tampilkan Hasil
     document.getElementById("res-nama").innerText = nama;
     document.getElementById("skor-teks").innerText = nilai;
     document.getElementById("quiz-content").style.display = "none";
@@ -799,23 +797,24 @@ function selesaiUjian() {
     document.getElementById("hasil-akhir").style.display = "block";
     window.scrollTo({top: 0, behavior: 'smooth'});
 
-    // Kirim & Bersihkan Sesi
     kirimKeSheets(nama, nis, kelas, nilai);
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(JAWABAN_KEY);
-    sessionStorage.removeItem("sesi_aktif_mtk");
 }
 
-function hitungSkor() { selesaiUjian(); }
-
+// 3. FUNGSI RESET UNTUK SISWA BARU (PASTI RESET WAKTU)
 function resetUjian() {
-    if (confirm("Reset ujian untuk siswa baru?")) {
+    if (confirm("Mulai ujian baru untuk siswa berikutnya? Seluruh jawaban dan waktu akan di-reset.")) {
+        // Hentikan timer yang sedang berjalan
+        if (window.intervalTimer) clearInterval(window.intervalTimer);
+        
+        // Hapus memori browser
         localStorage.clear();
-        sessionStorage.clear();
+
+        // Paksa ke halaman dengan parameter reset agar timer kembali ke 70 menit
         window.location.href = window.location.pathname + "?reset=true";
     }
 }
 
+// FUNGSI PEMBANTU
 function checkMC(name, kunci) {
     let choices = Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(el => el.value.trim());
     if (choices.length !== kunci.length) return false;
@@ -830,7 +829,6 @@ function checkBS(namePrefix, kunci) {
 }
 
 function kirimKeSheets(nama, nis, kelas, skor) {
-    // URL Apps Script Matematika Bapak
     const scriptURL = 'https://script.google.com/macros/s/AKfycbziEBOBozNRvbjrUpEHEu7P7TUvqB96rMMhSaiICtmavblQcwzQWXqI95pNE9NvqblZ/exec';
     const formulir = new URLSearchParams();
     formulir.append('nama', nama);
@@ -841,8 +839,8 @@ function kirimKeSheets(nama, nis, kelas, skor) {
     fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: formulir });
 }
 </script>
- 
 
 </body>
 
 </html>
+
