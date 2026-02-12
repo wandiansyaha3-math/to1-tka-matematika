@@ -847,8 +847,28 @@ function kirimKeSheets(nama, nis, kelas, skor) {
     formulir.append('waktu', new Date().toLocaleString('id-ID'));
     fetch(scriptURL, { method: 'POST', mode: 'no-cors', body: formulir });
 }
+
+    // 1. Matikan Klik Kanan
+document.oncontextmenu = () => false;
+
+// 2. Matikan F12 dan Inspect Element
+document.onkeydown = function(e) {
+    if (e.keyCode == 123 || 
+        (e.ctrlKey && e.shiftKey && e.keyCode == 73) || 
+        (e.ctrlKey && e.shiftKey && e.keyCode == 74) || 
+        (e.ctrlKey && e.keyCode == 85)) {
+        alert("Akses dilarang! Kerjakan dengan jujur.");
+        return false;
+    }
+};
+
+// 3. Perangkap Debugger (Membuat browser murid 'hang' jika buka Inspect)
+setInterval(function() {
+    debugger;
+}, 100);
 </script>
  
 
 </body>
 </html>
+
