@@ -136,7 +136,7 @@
             <div id="skor-teks" style="font-size: 4em; font-weight: bold; color: #2c3e50; margin: 10px 0;">0</div>
             <p style="color: #7f8c8d;">Data nilai telah berhasil dikirim ke server.</p>
             <button onclick="resetUjian()" style="padding: 12px 25px; background: #6c5ce7; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 15px;">
-                MASUKKAN SISWA BARU
+                KEMBALI KE AWAL
             </button>
         </div>
     </div>
@@ -630,11 +630,7 @@ Jika seseorang membeli 19,6 kg untuk jenis beras yang sama, berapa perkiraan tot
 
     </div>
 
-    <div id="hasil-akhir">
-    <h1 id="skor-teks" style="font-size: 5em; color: #27ae60; margin: 0;">0</h1>
-    <p style="font-size: 1.5em;">Skor Anda</p>
-    <p id="deskripsi"></p>
-    </div>
+    
 </div>
 
 <script>
@@ -760,6 +756,7 @@ function selesaiUjian() {
     const nama = document.getElementById("nama-siswa").value;
     const nis = document.getElementById("nis-siswa").value;
     const kelas = document.getElementById("kelas-siswa").value;
+    const semuaJawaban = JSON.parse(localStorage.getItem(JAWABAN_KEY)) || {};
 
     if (!nama || !nis || !kelas) {
         alert("Mohon lengkapi Nama, NIS, dan Kelas!");
@@ -806,8 +803,13 @@ function selesaiUjian() {
     document.getElementById("hasil-akhir").style.display = "block";
     window.scrollTo({top: 0, behavior: 'smooth'});
 
-    // Kirim & Bersihkan Sesi
+    
+    // 1. Kirim ke Spreadsheet NILAI (Fungsi lama Bapak)
     kirimKeSheets(nama, nis, kelas, nilai);
+
+    // 2. Kirim ke Spreadsheet ANALISIS (Fungsi baru)
+    kirimDetailJawaban(nama, nis, kelas, nilai, semuaJawaban);
+    
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(JAWABAN_KEY);
     sessionStorage.removeItem("sesi_aktif_mtk");
@@ -866,8 +868,48 @@ document.onkeydown = function(e) {
 setInterval(function() {
     debugger;
 }, 100);
+
+function kirimDetailJawaban(nama, nis, kelas, skor, detail) {
+    const scriptURLAnalisis = 'https://script.google.com/macros/s/AKfycbwvkhqOHzilRmUHQIf936EkoE2cJCK1FCyvF-sPMhVS7MslSxLSW5yzTxuZdgY2kPNwhg/exec'; 
+    const formulir = new URLSearchParams();
+    
+    formulir.append('nama', nama);
+    formulir.append('nis', nis);
+    formulir.append('kelas', kelas);
+    formulir.append('skor', skor);
+    formulir.append('waktu', new Date().toLocaleString('id-ID'));
+    
+    for (let i = 1; i <= 30; i++) {
+        let jawaban = detail[`q${i}`] || "";
+
+        // LOGIKA MCMA: Jika array [1, 2, 3] menjadi "123"
+        if (Array.isArray(jawaban)) {
+            jawaban = jawaban.join(""); // Tanpa pemisah koma
+        }
+
+        // LOGIKA BENAR-SALAH: Jika q24_1, q24_2, q24_3 ada, gabung jadi "BBS"
+        let bsCombine = "";
+        for (let j = 1; j <= 3; j++) {
+            let valBS = detail[`q${i}_${j}`] || "";
+            if (valBS) {
+                // Mengambil huruf depannya saja (B/S) jika valuenya "Benar"/"Salah"
+                bsCombine += valBS.charAt(0).toUpperCase(); 
+            }
+        }
+
+        // Jika ini soal tipe BS, gunakan hasil gabungan B/S tadi
+        if (bsCombine !== "") {
+            formulir.append(`q${i}`, bsCombine);
+        } else {
+            formulir.append(`q${i}`, jawaban);
+        }
+    }
+
+    fetch(scriptURLAnalisis, { method: 'POST', mode: 'no-cors', body: formulir });
+}
 </script>
  
+
 
 </body>
 </html>
